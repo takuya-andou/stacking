@@ -37,42 +37,42 @@ class StackModel:
         self.kfold_seed = kfold_seed  # ランダムシード
         self.merge_method = merge_method  # 複数モデルの予測値をマージする方法
 
-    def fit(self, df, refit=False):
+    def fit(self, data, refit=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:  # 学習済みじゃないか、再学習しろと言われているか
             print(self.model_name, 'start fit')
-            kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(df))  # indexじゃなくて行数が返ってくる
-            train_pred = np.empty(len(df), dtype=df.dtypes[self.y_names])
+            kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(data))  # indexじゃなくて行数が返ってくる
+            train_pred = np.empty(len(data), dtype=data.dtypes[self.y_names])
             for i, (tr_index, ts_index) in enumerate(kf):  # k_fold回繰り返される
-                tr_x = df.iloc[tr_index][self.x_names]
-                ts_x = df.iloc[ts_index][self.x_names]
-                tr_y = df.iloc[tr_index][self.y_names]
+                tr_x = data.iloc[tr_index][self.x_names]
+                ts_x = data.iloc[ts_index][self.x_names]
+                tr_y = data.iloc[tr_index][self.y_names]
                 model_ = self.model(**self.params)
                 model_.fit(tr_x, tr_y)  # 学習 model()依存！！！
                 train_pred[ts_index] = model_.predict(ts_x)  # 予測 model()依存！！！
                 self.models.append(model_)  # 学習済みモデルに追加
-            self.train_pred = pd.Series(data=train_pred, index=df.index)  # インスタンスにもたせておく
+            self.train_pred = pd.Series(data=train_pred, index=data.index)  # インスタンスにもたせておく
             self.save_fit()
             print(self.model_name, 'end fit')
         else:
             self.load_fit()
             print(self.model_name, 'dont fit')
 
-    def predict(self, df, repredict=False):
+    def predict(self, data, repredict=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:  # 予測済みじゃないか、再予測しろと言われているか
             print(self.model_name, 'start predict')
 
             predict = []
             for i, model_ in enumerate(self.models):  # モデル数分回る
-                predict.append(model_.predict(df[self.x_names]))  # 予測する  model()依存！！！
+                predict.append(model_.predict(data[self.x_names]))  # 予測する  model()依存！！！
             predict = np.stack(predict)
 
             if self.merge_method is 'mean':
-                self.test_pred = pd.Series(data=predict.mean(axis=0), index=df.index)  # 各モデルの予測の平均値を取る
+                self.test_pred = pd.Series(data=predict.mean(axis=0), index=data.index)  # 各モデルの予測の平均値を取る
             elif self.merge_method is 'median':
-                self.test_pred = pd.Series(data=np.median(predict, axis=0), index=df.index)  # 各モデルの予測の中央値を取る
+                self.test_pred = pd.Series(data=np.median(predict, axis=0), index=data.index)  # 各モデルの予測の中央値を取る
             elif self.merge_method is 'mode':
                 predict = stats.mode(predict, axis=0).mode  # 各モデルの最頻値を取る
-                self.test_pred = pd.Series(data=predict.reshape(predict.shape[1:predict.ndim]), index=df.index)
+                self.test_pred = pd.Series(data=predict.reshape(predict.shape[1:predict.ndim]), index=data.index)
 
             self.save_predict()
             print(self.model_name, 'end predict')
@@ -106,11 +106,11 @@ class StackMaster:
         self.train_pred = None  # 学習データの予測値
         self.test_pred = None  # テストデータの予測値
 
-    def fit(self, df, refit=False):
+    def fit(self, data, refit=False):
         train_pred = []
         model_names = []
         for i, model in enumerate(self.models):
-            model.fit(df, refit=refit)
+            model.fit(data, refit=refit)
             train_pred.append(model.train_pred)
             model_names.append(model.model_name)
         if len(self.models) >= 2:
@@ -118,13 +118,13 @@ class StackMaster:
             self.train_pred.columns = model_names
         else:
             self.train_pred = pd.DataFrame({model_names[0]: train_pred[0]})
-        self.train_pred = pd.merge(df, self.train_pred, left_index=True, right_index=True, how='inner')
+        self.train_pred = pd.merge(data, self.train_pred, left_index=True, right_index=True, how='inner')
 
-    def predict(self, df, repredict=False):
+    def predict(self, data, repredict=False):
         test_pred = []
         model_names = []
         for i, model in enumerate(self.models):
-            model.predict(df, repredict=repredict)
+            model.predict(data, repredict=repredict)
             test_pred.append(model.test_pred)
             model_names.append(model.model_name)
         if len(self.models) >= 2:
@@ -132,4 +132,4 @@ class StackMaster:
             self.test_pred.columns = model_names
         else:
             self.test_pred = pd.DataFrame({model_names[0]: test_pred[0]})
-        self.test_pred = pd.merge(df, self.test_pred, left_index=True, right_index=True, how='inner')
+        self.test_pred = pd.merge(data, self.test_pred, left_index=True, right_index=True, how='inner')
