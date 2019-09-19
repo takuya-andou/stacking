@@ -17,6 +17,8 @@ def save_pkl(dir_name, filename, target_file):
     f = open(f'{dir_name}/{filename}.pkl', 'wb')
     pickle.dump(target_file, f)
     f.close
+
+
 # pklファイルからロード
 def load_pkl(dir_name, filename):
     f = open(f'{dir_name}/{filename}.pkl', 'rb')
@@ -101,10 +103,11 @@ class StackModel:
 
 # 各モデルをいっぺんに学習させたり予測させたりするもの
 class StackMaster:
-    def __init__(self, models):
+    def __init__(self, models, merge_data=False):
         self.models = models  # 学習・予測に使うモデル名のリスト
         self.train_pred = None  # 学習データの予測値
         self.test_pred = None  # テストデータの予測値
+        self.merge_data = merge_data
 
     def fit(self, data, refit=False):
         train_pred = []
@@ -118,7 +121,8 @@ class StackMaster:
             self.train_pred.columns = model_names
         else:
             self.train_pred = pd.DataFrame({model_names[0]: train_pred[0]})
-        self.train_pred = pd.merge(data, self.train_pred, left_index=True, right_index=True, how='inner')
+        if self.merge_data:
+            self.train_pred = pd.merge(data, self.train_pred, left_index=True, right_index=True, how='inner')
 
     def predict(self, data, repredict=False):
         test_pred = []
@@ -132,4 +136,5 @@ class StackMaster:
             self.test_pred.columns = model_names
         else:
             self.test_pred = pd.DataFrame({model_names[0]: test_pred[0]})
-        self.test_pred = pd.merge(data, self.test_pred, left_index=True, right_index=True, how='inner')
+        if self.merge_data:
+            self.test_pred = pd.merge(data, self.test_pred, left_index=True, right_index=True, how='inner')
