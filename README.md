@@ -10,7 +10,7 @@
 
 [スタッキング](https://en.wikipedia.org/wiki/Ensemble_learning#Stacking)はいくつかのモデルを学習して、それらの予測を組み合わせます。[このブログ](http://mlwave.com/kaggle-ensembling-guide/)がスタッキングやアンサンブル学習の参考にとてもなります。
 
-## Requirement
+# Requirement
 
 - python 3.5+(don't know about version < 3.5, sorry)
 - os
@@ -21,7 +21,7 @@
 - pandas
 - sklearn
 
-## Installation
+# Installation
 
 To install stacking, `cd` to the stacking folder and run the install command**(up-to-date version, recommended)**:
 ```
@@ -33,31 +33,8 @@ You can also install stacking from PyPI:
 pip install stacking
 ```
 
-## Usage
+# Usage
 
-### StackModel
+## StackModel
 
-
-### StackMaster
-
-
-## Files 
-
-ここいらないかも
-
-## License
-
-ここいらないかも
-
-## Dataset
-
-ここいらないかも
-
-# 参考サイト(公開時には消す？)
-- https://github.com/ikki407/stacking/blob/master/README.md
-↑多分一番代表的な(?)スタッキングのパッケージ
-- https://qiita.com/Kensuke-Mitsuzawa/items/7717f823df5a30c27077
-- https://github.com/Shinichi-Nakagawa/pitchpx/blob/master/README.md
-- https://github.com/vecxoz/vecstack/blob/master/README.md
-
-
+## StackMaster
