@@ -5,6 +5,15 @@ import pandas as pd
 from functools import reduce
 import scipy.stats as stats
 from sklearn.model_selection import KFold
+from logging import getLogger, StreamHandler, DEBUG, Formatter
+
+logger = getLogger(__name__)
+logger.setLevel(DEBUG)
+handler = StreamHandler()
+handler.setLevel(DEBUG)
+handler_format = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(handler_format)
+logger.addHandler(handler)
 
 # 学習済みモデルのディレクトリ指定
 fitted_models_dir = 'fitted_models'
@@ -41,7 +50,7 @@ class StackModel:
 
     def fit(self, data, refit=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:  # 学習済みじゃないか、再学習しろと言われているか
-            print(self.model_name, 'start fit')
+            logger.info(self.model_name + ' start fit')
             kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(data))  # indexじゃなくて行数が返ってくる
             train_pred = np.empty(len(data), dtype=data.dtypes[self.y_names])
             for i, (tr_index, ts_index) in enumerate(kf):  # k_fold回繰り返される
@@ -53,15 +62,14 @@ class StackModel:
                 train_pred[ts_index] = model_.predict(ts_x)  # 予測 model()依存！！！
                 self.models.append(model_)  # 学習済みモデルに追加
             self.train_pred = pd.Series(data=train_pred, index=data.index)  # インスタンスにもたせておく
+            logger.info(self.model_name + ' end fit')
             self.save_fit()
-            print(self.model_name, 'end fit')
         else:
             self.load_fit()
-            print(self.model_name, 'dont fit')
 
     def predict(self, data, repredict=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:  # 予測済みじゃないか、再予測しろと言われているか
-            print(self.model_name, 'start predict')
+            logger.info(self.model_name + 'start predict')
 
             predict = []
             for i, model_ in enumerate(self.models):  # モデル数分回る
@@ -76,29 +84,28 @@ class StackModel:
                 predict = stats.mode(predict, axis=0).mode  # 各モデルの最頻値を取る
                 self.test_pred = pd.Series(data=predict.reshape(predict.shape[1:predict.ndim]), index=data.index)
 
+            logger.info(self.model_name + ' end predict')
             self.save_predict()
-            print(self.model_name, 'end predict')
         else:
             self.load_predict()
-            print(self.model_name, 'dont predict')
 
     def save_fit(self):
         save_pkl(fitted_models_dir, self.model_name + '_models', self.models)
         save_pkl(fitted_models_dir, self.model_name + '_train_pred', self.train_pred)
-        print('save fit pkl')
+        logger.info(self.model_name + ' save fit pkl')
 
     def save_predict(self):
         save_pkl(fitted_models_dir, self.model_name + '_test_pred', self.test_pred)
-        print('save pred pkl')
+        logger.info(self.model_name + ' save pred pkl')
 
     def load_fit(self):
         self.models = load_pkl(fitted_models_dir, self.model_name + '_models')
         self.train_pred = load_pkl(fitted_models_dir, self.model_name + '_train_pred')
-        print("load fit pkl")
+        logger.info(self.model_name + " load fit pkl")
 
     def load_predict(self):
         self.test_pred = load_pkl(fitted_models_dir, self.model_name + '_test_pred')
-        print("load pred pkl")
+        logger.info(self.model_name + " load pred pkl")
 
 
 # 各モデルをいっぺんに学習させたり予測させたりするもの
