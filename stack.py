@@ -69,7 +69,7 @@ class StackModel:
 
     def predict(self, data, repredict=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:  # 予測済みじゃないか、再予測しろと言われているか
-            logger.info(self.model_name + 'start predict')
+            logger.info(self.model_name + ' start predict')
 
             predict = []
             for i, model_ in enumerate(self.models):  # モデル数分回る
