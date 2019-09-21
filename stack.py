@@ -7,6 +7,7 @@ import scipy.stats as stats
 from sklearn.model_selection import KFold
 from logging import getLogger, StreamHandler, DEBUG, Formatter
 
+# setting logger
 logger = getLogger(__name__)
 logger.setLevel(DEBUG)
 handler = StreamHandler()
@@ -15,20 +16,20 @@ handler_format = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s
 handler.setFormatter(handler_format)
 logger.addHandler(handler)
 
-# 学習済みモデルのディレクトリ指定
+# settingSet the directory for trained models
 fitted_models_dir = 'fitted_models'
 if not os.path.isdir(fitted_models_dir):
     os.makedirs(fitted_models_dir)
 
 
-# pklに保存したリロードしたり
+# save model to pickle
 def save_pkl(dir_name, filename, target_file):
     f = open(f'{dir_name}/{filename}.pkl', 'wb')
     pickle.dump(target_file, f)
     f.close
 
 
-# pklファイルからロード
+# load model from pickle
 def load_pkl(dir_name, filename):
     f = open(f'{dir_name}/{filename}.pkl', 'rb')
     return pickle.load(f)
@@ -36,47 +37,47 @@ def load_pkl(dir_name, filename):
 
 class StackModel:
     def __init__(self, model, model_name, x_names=None, k_fold=5, kfold_seed=0, merge_method='mean', params={}):
-        self.model_name = model_name  # モデル名(いらないかも?)
-        self.x_names = x_names  # 説明変数のカラム名(リスト)
-        self.k_fold = k_fold  # 学習時のk-foldの分割数
-        self.train_pred = None  # 学習データの予測値
-        self.test_pred = None  # テストデータの予測値
-        self.model = model
-        self.params = params
-        self.models = []  # k_foldのときできる複数のモデルを格納
-        self.kfold_seed = kfold_seed  # ランダムシード
-        self.merge_method = merge_method  # 複数モデルの予測値をマージする方法
+        self.model_name = model_name  # this model name
+        self.x_names = x_names  # predictor variable names
+        self.k_fold = k_fold  # k-fold cross-validation
+        self.train_pred = None  # predicted values for train data
+        self.test_pred = None  # predicted values for test data
+        self.model = model  # class of this model
+        self.params = params  # hyper-parameter
+        self.models = []  # instance list of this model
+        self.kfold_seed = kfold_seed  # random seed used for cross-validation
+        self.merge_method = merge_method  # how to merge predicted values
 
     def fit(self, X, y, refit=False):
-        if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:  # 学習済みじゃないか、再学習しろと言われているか
+        if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:
             logger.info(self.model_name + ' start fit')
 
             if self.x_names is None:
                 self.x_names = X.columns.values.tolist()
 
-            kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X))  # indexじゃなくて行数が返ってくる
+            kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X))
             train_pred = np.empty(len(X), dtype=y.dtype)
             for i, (tr_index, ts_index) in enumerate(kf):  # k_fold回繰り返される
                 tr_x = X.iloc[tr_index][self.x_names]
                 ts_x = X.iloc[ts_index][self.x_names]
                 tr_y = y.iloc[tr_index]
                 model_ = self.model(**self.params)
-                model_.fit(tr_x, tr_y)  # 学習 model()依存！！！
-                train_pred[ts_index] = model_.predict(ts_x)  # 予測 model()依存！！！
-                self.models.append(model_)  # 学習済みモデルに追加
-            self.train_pred = pd.Series(data=train_pred, index=X.index, name=self.model_name)  # インスタンスにもたせておく
+                model_.fit(tr_x, tr_y)
+                train_pred[ts_index] = model_.predict(ts_x)
+                self.models.append(model_)
+            self.train_pred = pd.Series(data=train_pred, index=X.index, name=self.model_name)
             logger.info(self.model_name + ' end fit')
             self.save_fit()
         else:
             self.load_fit()
 
     def predict(self, X, repredict=False):
-        if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:  # 予測済みじゃないか、再予測しろと言われているか
+        if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:
             logger.info(self.model_name + ' start predict')
 
             predict = []
-            for i, model_ in enumerate(self.models):  # モデル数分回る
-                predict.append(model_.predict(X[self.x_names]))  # 予測する  model()依存！！！
+            for i, model_ in enumerate(self.models):
+                predict.append(model_.predict(X[self.x_names]))
             predict = np.stack(predict)
 
             if self.merge_method is 'mean':
@@ -112,12 +113,11 @@ class StackModel:
         logger.info(self.model_name + " load pred pkl")
 
 
-# 各モデルをいっぺんに学習させたり予測させたりするもの
 class StackMaster:
     def __init__(self, models, merge_data=False):
-        self.models = models  # 学習・予測に使うモデル名のリスト
-        self.train_pred = None  # 学習データの予測値
-        self.test_pred = None  # テストデータの予測値
+        self.models = models  # models list used for fit or predict
+        self.train_pred = None  # predicted values for train data
+        self.test_pred = None  # predicted values for test data
         self.merge_data = merge_data
 
     def fit(self, X, y, refit=False):
