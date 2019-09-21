@@ -36,7 +36,7 @@ def load_pkl(dir_name, filename):
 
 
 class StackModel:
-    def __init__(self, model, model_name, x_names=None, k_fold=5, kfold_seed=0, merge_method='mean', params={}):
+    def __init__(self, model, model_name, x_names=None, k_fold=5, kfold_seed=0, merge_method='mean', predict_proba=False, params={}):
         self.model_name = model_name  # this model name
         self.x_names = x_names  # predictor variable names
         self.k_fold = k_fold  # k-fold cross-validation
@@ -47,6 +47,7 @@ class StackModel:
         self.models = []  # instance list of this model
         self.kfold_seed = kfold_seed  # random seed used for cross-validation
         self.merge_method = merge_method  # how to merge predicted values
+        self.predict_proba = predict_proba  # flg for predict probability
 
     def fit(self, X, y, refit=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:
@@ -56,16 +57,25 @@ class StackModel:
                 self.x_names = X.columns.values.tolist()
 
             kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X))
-            train_pred = np.empty(len(X), dtype=y.dtype)
+            train_pred = [None] * len(y)
             for i, (tr_index, ts_index) in enumerate(kf):  # k_fold回繰り返される
                 tr_x = X.iloc[tr_index][self.x_names]
                 ts_x = X.iloc[ts_index][self.x_names]
                 tr_y = y.iloc[tr_index]
                 model_ = self.model(**self.params)
                 model_.fit(tr_x, tr_y)
-                train_pred[ts_index] = model_.predict(ts_x)
+                if self.predict_proba:
+                    pred_ = model_.predict_proba(ts_x)
+                else:
+                    pred_ = model_.predict(ts_x)
+                for j, idx in enumerate(ts_index):
+                    train_pred[idx] = pred_[j]
                 self.models.append(model_)
-            self.train_pred = pd.Series(data=train_pred, index=X.index, name=self.model_name)
+            if self.predict_proba:
+                train_pred = np.concatenate(train_pred, axis=0).reshape((len(y), -1))
+                self.train_pred = pd.DataFrame(train_pred, columns=[self.model_name + "_" + i for i in self.models[0].classes_])
+            else:
+                self.train_pred = pd.Series(data=train_pred, index=X.index, name=self.model_name)
             logger.info(self.model_name + ' end fit')
             self.save_fit()
         else:
@@ -77,7 +87,10 @@ class StackModel:
 
             predict = []
             for i, model_ in enumerate(self.models):
-                predict.append(model_.predict(X[self.x_names]))
+                if self.predict_proba:
+                    predict.append(model_.predict_proba(X[self.x_names]))
+                else:
+                    predict.append(model_.predict(X[self.x_names]))
             predict = np.stack(predict)
 
             if self.merge_method is 'mean':
@@ -87,7 +100,10 @@ class StackModel:
             elif self.merge_method is 'mode':
                 test_pred = stats.mode(predict, axis=0).mode
                 test_pred = test_pred.reshape(test_pred.shape[1:test_pred.ndim])
-            self.test_pred = pd.Series(data=test_pred, index=X.index, name=self.model_name)
+            if self.predict_proba:
+                self.test_pred = pd.DataFrame(test_pred, index=X.index, columns=[self.model_name + "_" + i for i in self.models[0].classes_])
+            else:
+                self.test_pred = pd.Series(data=test_pred, index=X.index, name=self.model_name)
 
             logger.info(self.model_name + ' end predict')
             self.save_predict()
