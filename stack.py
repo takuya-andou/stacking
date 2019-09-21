@@ -5,6 +5,7 @@ import pandas as pd
 from functools import reduce
 import scipy.stats as stats
 from sklearn.model_selection import KFold
+from sklearn.metrics import mean_absolute_error, accuracy_score, log_loss
 from logging import getLogger, StreamHandler, DEBUG, Formatter
 
 # setting logger
@@ -36,18 +37,33 @@ def load_pkl(dir_name, filename):
 
 
 class StackModel:
-    def __init__(self, model, model_name, x_names=None, k_fold=5, kfold_seed=0, merge_method='mean', predict_proba=False, params={}):
+    def __init__(self, model, model_name, x_names=None, regression=True, predict_proba=False, metric=None, k_fold=5, kfold_seed=0, params={}):
+        self.model = model  # class of this model
         self.model_name = model_name  # this model name
         self.x_names = x_names  # predictor variable names
+        self.regression = regression
+        self.predict_proba = predict_proba  # flg for predict probability
+        self.metric = metric
         self.k_fold = k_fold  # k-fold cross-validation
-        self.train_pred = None  # predicted values for train data
-        self.test_pred = None  # predicted values for test data
-        self.model = model  # class of this model
+        self.kfold_seed = kfold_seed  # random seed used for cross-validation
         self.params = params  # hyper-parameter
         self.models = []  # instance list of this model
-        self.kfold_seed = kfold_seed  # random seed used for cross-validation
-        self.merge_method = merge_method  # how to merge predicted values
-        self.predict_proba = predict_proba  # flg for predict probability
+        self.train_pred = None  # predicted values for train data
+        self.test_pred = None  # predicted values for test data
+        self.kf = None
+        self.train_scores = []
+
+        if self.regression and self.predict_proba:
+            self.regression = False
+
+        if self.metric is None:
+            if self.regression:
+                self.metric = mean_absolute_error
+            else:
+                if self.predict_proba:
+                    self.metric = log_loss
+                else:
+                    self.metric = accuracy_score
 
     def fit(self, X, y, refit=False):
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_models.pkl') == False or refit == True:
@@ -56,28 +72,42 @@ class StackModel:
             if self.x_names is None:
                 self.x_names = X.columns.values.tolist()
 
-            kf = list(KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X))
-            train_pred = [None] * len(y)
-            for i, (tr_index, ts_index) in enumerate(kf):  # k_fold回繰り返される
+            self.kf = KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X, y)
+
+            if not self.regression and self.predict_proba:
+                n_classes = len(np.unique(y))
+                dtype = str
+            else:
+                n_classes = 1
+                dtype = float
+
+            train_pred = np.zeros((X.shape[0], n_classes), dtype=float)
+
+            for fold_counter, (tr_index, ts_index) in enumerate(self.kf):  # k_fold回繰り返される
                 tr_x = X.iloc[tr_index][self.x_names]
                 ts_x = X.iloc[ts_index][self.x_names]
                 tr_y = y.iloc[tr_index]
-                model_ = self.model(**self.params)
-                model_.fit(tr_x, tr_y)
+                ts_y = y.iloc[ts_index]
+
+                model = self.model(**self.params)
+                model.fit(tr_x, tr_y)
                 if self.predict_proba:
-                    pred_ = model_.predict_proba(ts_x)
+                    tmp_pred = model.predict_proba(ts_x)
                 else:
-                    pred_ = model_.predict(ts_x)
-                for j, idx in enumerate(ts_index):
-                    train_pred[idx] = pred_[j]
-                self.models.append(model_)
-            if self.predict_proba:
-                train_pred = np.concatenate(train_pred, axis=0).reshape((len(y), -1))
+                    tmp_pred = model.predict(ts_x)
+                self.train_scores.append(self.metric(ts_y, tmp_pred))
+
+                train_pred[ts_index, :] = tmp_pred.reshape(-1, n_classes)
+                self.models.append(model)
+
+            if not self.regression and self.predict_proba:
                 self.train_pred = pd.DataFrame(train_pred, columns=[self.model_name + "_" + i for i in self.models[0].classes_])
             else:
-                self.train_pred = pd.Series(data=train_pred, index=X.index, name=self.model_name)
+                self.train_pred = pd.Series(data=train_pred.reshape(-1), index=X.index, name=self.model_name)
+
             logger.info(self.model_name + ' end fit')
             self.save_fit()
+
         else:
             self.load_fit()
 
@@ -85,23 +115,22 @@ class StackModel:
         if os.path.exists(f'{fitted_models_dir}/{self.model_name}_test_pred.pkl') == False or repredict == True:
             logger.info(self.model_name + ' start predict')
 
-            predict = []
-            for i, model_ in enumerate(self.models):
+            test_pred = []
+            for i, model in enumerate(self.models):
                 if self.predict_proba:
-                    predict.append(model_.predict_proba(X[self.x_names]))
+                    test_pred.append(model.predict_proba(X[self.x_names]))
                 else:
-                    predict.append(model_.predict(X[self.x_names]))
-            predict = np.stack(predict)
+                    test_pred.append(model.predict(X[self.x_names]))
+            test_pred = np.stack(test_pred)
 
-            if self.merge_method is 'mean':
-                test_pred = predict.mean(axis=0)
-            elif self.merge_method is 'median':
-                test_pred = np.median(predict, axis=0)
-            elif self.merge_method is 'mode':
-                test_pred = stats.mode(predict, axis=0).mode
+            if self.regression or self.predict_proba:
+                test_pred = test_pred.mean(axis=0)
+            else:
+                test_pred = stats.mode(test_pred, axis=0).mode
                 test_pred = test_pred.reshape(test_pred.shape[1:test_pred.ndim])
-            if self.predict_proba:
-                self.test_pred = pd.DataFrame(test_pred, index=X.index, columns=[self.model_name + "_" + i for i in self.models[0].classes_])
+
+            if not self.regression and self.predict_proba:
+                self.test_pred = pd.DataFrame(data=test_pred, index=X.index, columns=[self.model_name + "_" + i for i in self.models[0].classes_])
             else:
                 self.test_pred = pd.Series(data=test_pred, index=X.index, name=self.model_name)
 
@@ -109,6 +138,9 @@ class StackModel:
             self.save_predict()
         else:
             self.load_predict()
+
+    def evaluate(self, y):
+        return (self.metric(y, self.test_pred))
 
     def save_fit(self):
         save_pkl(fitted_models_dir, self.model_name + '_models', self.models)
