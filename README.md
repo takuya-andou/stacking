@@ -24,6 +24,7 @@
 # Installation
 
 You can install stacking from PyPI:
+
 ```
 pip install practical_stacking
 ```
