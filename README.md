@@ -30,12 +30,13 @@ pip install practical_stacking
 
 # Usage
 
-**See working example:**
+See working example:
+
  * [Regression](https://github.com/takuya-andou/stacking/blob/master/examples/01_regression.ipynb)
  * [Classification (with class labels)](https://github.com/takuya-andou/stacking/blob/master/examples/02_classification_with_class_labels.ipynb)
  * [Classification (with class probabilities)](https://github.com/takuya-andou/stacking/blob/master/examples/03_classification_with_class_probabilities.ipynb)
 
-**See basic usage:**
+See basic usage:
 
 ```python
 # Import practical_stacking
