@@ -77,14 +77,19 @@ class StackModel:
 
             self.kf = KFold(n_splits=self.k_fold, shuffle=True, random_state=self.kfold_seed).split(X, y)
 
-            if not self.regression and self.predict_proba:
-                n_classes = len(np.unique(y))
-                dtype = str
-            else:
+            if self.regression:
                 n_classes = 1
                 dtype = float
+            elif self.predict_proba:
+                n_classes = len(np.unique(y))
+                dtype = float
+                y = y.astype(str)
+            else:
+                n_classes = 1
+                dtype = object
+                y = y.astype(str)
 
-            S_train = np.zeros((X.shape[0], n_classes), dtype=float)
+            S_train = np.zeros((X.shape[0], n_classes), dtype=dtype)
 
             for model, (tr_index, ts_index) in zip(self.models, self.kf):
                 tr_x = X.iloc[tr_index][self.x_names]
