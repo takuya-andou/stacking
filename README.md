@@ -23,18 +23,43 @@
 
 # Installation
 
-To install stacking, `cd` to the stacking folder and run the install command**(up-to-date version, recommended)**:
+You can install stacking from PyPI:
 ```
-sudo python setup.py install
-```
-
-You can also install stacking from PyPI:
-```
-pip install stacking
+pip install practical_stacking
 ```
 
 # Usage
 
-## StackModel
+**See working example:**
+ * [Regression](https://github.com/takuya-andou/stacking/blob/master/examples/01_regression.ipynb)
+ * [Classification (with class labels)](https://github.com/takuya-andou/stacking/blob/master/examples/02_classification_with_class_labels.ipynb)
+ * [Classification (with class probabilities)](https://github.com/takuya-andou/stacking/blob/master/examples/03_classification_with_class_probabilities.ipynb)
 
-## StackMaster
+**See basic usage:**
+
+```python
+# Import practical_stacking
+from pracstack import StackModel, StackMaster
+
+# Get your data
+
+# Initialize 1st level models
+models = [
+    StackModel(model_name='Li',model=LinearRegression),
+    StackModel(model_name='Ridge',model=Ridge)]
+
+# Initialize StackMaster
+master = StackMaster(models=models)
+
+# Fit 1st level models
+master.fit(X_train, y_train)
+
+# Predict 1st level models
+master.predict(X_test)
+
+# Get your stacked features
+S_train = master.S_train
+S_test = master.S_test
+
+# Use 2nd level models with stacked features
+```
